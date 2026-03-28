@@ -10,6 +10,20 @@
 
 ---
 
+## Screenshots
+
+![Dashboard Overview](./docs/dashboard.png)
+*Dashboard — live stats, status breakdown, and recent tasks*
+
+![All Tasks](./docs/all_tasks.png)
+*All Tasks — filterable card grid with retry/cancel actions*
+
+![Submit Task](./docs/new_task.png)
+*Submit Task — dynamic payload fields and priority selector*
+
+
+---
+
 ## Features
 
 - ✅ **3 job types** — file processing, data export, email batch
