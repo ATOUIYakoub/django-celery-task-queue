@@ -6,13 +6,7 @@
 
 ## Architecture
 
-<!-- Replace the image below with your SVG file once uploaded -->
-<!-- Example: ![Architecture Diagram](./docs/architecture.svg) -->
-
-> 📌 **Architecture diagram goes here** — upload your SVG and replace this block with:
-> ```md
-> ![Architecture Diagram](./docs/architecture.svg)
-> ```
+![Architecture Diagram](./docs/architecture.svg)
 
 ---
 
