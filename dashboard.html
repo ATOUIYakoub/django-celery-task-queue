@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TaskQueue Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--card:#1a1d27;--border:#2a2d3e;
+  --accent:#6c63ff;--success:#00d4aa;--warn:#f5a623;--danger:#ff5370;
+  --text:#e2e8f0;--muted:#8892a4;--sidebar:220px;
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;overflow:hidden}
+a{color:inherit;text-decoration:none}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0}
+.sidebar-logo{padding:24px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.sidebar-logo .logo-icon{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.sidebar-logo .logo-text{font-size:17px;font-weight:700;letter-spacing:.3px}
+.sidebar-nav{flex:1;padding:12px 0}
+.nav-item{display:flex;align-items:center;gap:12px;padding:11px 20px;cursor:pointer;transition:.15s;color:var(--muted);font-size:14px;font-weight:500;border-left:3px solid transparent}
+.nav-item:hover{background:rgba(108,99,255,.08);color:var(--text)}
+.nav-item.active{background:rgba(108,99,255,.12);color:var(--accent);border-left-color:var(--accent)}
+.nav-item .fa{width:18px;text-align:center}
+.sidebar-bottom{padding:16px 20px;border-top:1px solid var(--border)}
+.conn-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);transition:.3s}
+.conn-dot.online{background:var(--success)}
+
+/* MAIN */
+.main{flex:1;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.top-bar{padding:20px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card)}
+.top-bar h1{font-size:18px;font-weight:600}
+.page{display:none;padding:28px;animation:fadeIn .15s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:50%;opacity:.08;transform:translate(15px,-15px)}
+.stat-card.purple::before{background:var(--accent)}
+.stat-card.teal::before{background:var(--success)}
+.stat-card.red::before{background:var(--danger)}
+.stat-card.amber::before{background:var(--warn)}
+.stat-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.stat-val{font-size:32px;font-weight:700;margin-bottom:4px}
+.stat-icon{position:absolute;top:18px;right:18px;font-size:20px;opacity:.4}
+.stat-card.purple .stat-val,.stat-card.purple .stat-icon{color:var(--accent)}
+.stat-card.teal .stat-val,.stat-card.teal .stat-icon{color:var(--success)}
+.stat-card.red .stat-val,.stat-card.red .stat-icon{color:var(--danger)}
+.stat-card.amber .stat-val,.stat-card.amber .stat-icon{color:var(--warn)}
+
+/* SKELETON */
+.skeleton{background:linear-gradient(90deg,#1e2133 25%,#262a3e 50%,#1e2133 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* STATUS BAR */
+.status-bar-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px}
+.status-bar-wrap h3{font-size:14px;font-weight:600;margin-bottom:16px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.status-bar{display:flex;height:20px;border-radius:10px;overflow:hidden;gap:2px}
+.status-seg{height:100%;transition:width .6s ease;cursor:default;position:relative}
+.status-seg:hover::after{content:attr(data-tip);position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:#0a0c14;color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px;white-space:nowrap;pointer-events:none;z-index:10}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+
+/* TABLE */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.table-header h3{font-size:14px;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{padding:12px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border)}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(42,45,62,.5);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.badge.pending{background:rgba(136,146,164,.15);color:#8892a4}
+.badge.sent{background:rgba(136,146,164,.15);color:#8892a4}
+.badge.started{background:rgba(100,149,237,.15);color:#6495ed}
+.badge.progress{background:rgba(245,166,35,.15);color:var(--warn)}
+.badge.success{background:rgba(0,212,170,.15);color:var(--success)}
+.badge.failure{background:rgba(255,83,112,.15);color:var(--danger)}
+.badge.retry{background:rgba(255,140,0,.15);color:#ff8c00}
+.badge.revoked{background:rgba(136,146,164,.15);color:#8892a4}
+.badge.high{background:rgba(255,83,112,.15);color:var(--danger)}
+.badge.default{background:rgba(108,99,255,.15);color:var(--accent)}
+.badge.low{background:rgba(136,146,164,.15);color:#8892a4}
+
+/* PROGRESS BAR */
+.prog-wrap{background:#0a0c14;border-radius:4px;height:6px;overflow:hidden;width:100%}
+.prog-fill{height:100%;border-radius:4px;transition:width .4s ease;background:linear-gradient(90deg,var(--accent),var(--success))}
+
+/* FORMS */
+.form-card{max-width:600px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px}
+.form-title{font-size:20px;font-weight:700;margin-bottom:28px;display:flex;align-items:center;gap:10px}
+.form-group{margin-bottom:20px}
+label{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-bottom:8px}
+input[type=text],input[type=number],select,textarea{width:100%;background:#0f1117;border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:14px;transition:.2s;outline:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.15)}
+select option{background:#1a1d27}
+.toggle-group{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.toggle-btn{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:13px;font-weight:500;transition:.2s;color:var(--muted)}
+.toggle-btn:hover{background:rgba(255,255,255,.05)}
+.toggle-btn.active{background:var(--accent);color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 22px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:.2s;font-family:inherit}
+.btn-primary{background:var(--accent);color:#fff;width:100%;padding:14px}
+.btn-primary:hover{background:#5a52d5}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed}
+.btn-sm{padding:7px 14px;font-size:12px;border-radius:6px}
+.btn-success{background:rgba(0,212,170,.15);color:var(--success);border:1px solid rgba(0,212,170,.3)}
+.btn-danger{background:rgba(255,83,112,.15);color:var(--danger);border:1px solid rgba(255,83,112,.3)}
+.btn-warn{background:rgba(245,166,35,.15);color:var(--warn);border:1px solid rgba(245,166,35,.3)}
+.btn-muted{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid var(--border)}
+.btn:hover{filter:brightness(1.15)}
+.banner{padding:14px 18px;border-radius:10px;font-size:14px;margin-top:20px;display:none;align-items:flex-start;gap:12px}
+.banner.show{display:flex}
+.banner.success{background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.3);color:var(--success)}
+.banner.error{background:rgba(255,83,112,.1);border:1px solid rgba(255,83,112,.3);color:var(--danger)}
+
+/* TASK CARDS */
+.filter-bar{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center}
+.filter-bar select,.filter-bar input{flex:1;min-width:140px;max-width:200px}
+.task-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.task-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;transition:.2s;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.task-card:hover{border-color:var(--accent);box-shadow:0 4px 20px rgba(108,99,255,.1)}
+.task-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+.task-name{font-weight:600;font-size:14px}
+.task-meta{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:12px;color:var(--muted)}
+.task-actions{display:flex;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.icon-btn{width:30px;height:30px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;border:none;transition:.2s}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:640px;width:90%;max-height:85vh;overflow-y:auto;position:relative}
+.modal-close{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:6px;background:rgba(255,255,255,.05);border:none;color:var(--text);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.kv{display:grid;grid-template-columns:160px 1fr;gap:8px;font-size:13px;margin-bottom:8px}
+.kv-key{color:var(--muted);font-weight:500}
+.json-block{background:#0a0c14;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'Courier New',monospace;font-size:12px;white-space:pre-wrap;overflow-x:auto;margin-top:8px;color:#00d4aa}
+
+/* DLQ */
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
+
+/* WEBSOCKET TESTER */
+.ws-connect-bar{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.ws-connect-bar input{flex:1;min-width:240px}
+.ws-status{display:flex;align-items:center;gap:8px;font-size:13px;padding:10px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px;white-space:nowrap}
+.ws-dot{width:8px;height:8px;border-radius:50%;background:var(--danger)}
+.ws-dot.connecting{background:var(--warn)}
+.ws-dot.connected{background:var(--success);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,212,170,.4)}50%{box-shadow:0 0 0 6px rgba(0,212,170,0)}}
+.progress-display{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;display:none}
+.progress-display.show{display:block}
+.progress-pct{font-size:48px;font-weight:800;color:var(--accent);text-align:center;margin-bottom:8px}
+.progress-pct.pulsing{animation:textPulse 1s infinite}
+@keyframes textPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.progress-msg{text-align:center;color:var(--muted);font-size:14px;margin-bottom:16px}
+.progress-bar-lg{height:12px;background:#0a0c14;border-radius:6px;overflow:hidden}
+.progress-bar-lg .prog-fill{height:100%}
+.terminal{background:#0a0c14;border:1px solid var(--border);border-radius:12px;padding:0;font-family:'Courier New',monospace;font-size:12px;height:300px;overflow-y:auto;display:flex;flex-direction:column}
+.terminal-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:11px;font-family:system-ui}
+.terminal-body{flex:1;overflow-y:auto;padding:12px 14px;color:#00d4aa}
+.log-line{margin-bottom:4px;line-height:1.5}
+.log-time{color:var(--muted)}
+.send-bar{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.send-bar input{flex:1;min-width:200px}
+
+/* TOAST */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:2000;display:flex;flex-direction:column;gap:10px}
+.toast{padding:14px 18px;border-radius:10px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:10px;min-width:240px;animation:toastIn .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+.toast.success{background:#0d2e27;border:1px solid rgba(0,212,170,.3);color:var(--success)}
+.toast.error{background:#2e0d14;border:1px solid rgba(255,83,112,.3);color:var(--danger)}
+.toast.info{background:#1a1535;border:1px solid rgba(108,99,255,.3);color:var(--accent)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .sidebar{width:100%;height:auto;flex-direction:row;overflow-x:auto;position:fixed;bottom:0;top:auto;border-right:none;border-top:1px solid var(--border);z-index:100}
+  .sidebar-logo,.sidebar-bottom{display:none}
+  .sidebar-nav{display:flex;padding:0;flex:none}
+  .nav-item{flex-direction:column;gap:4px;padding:12px 18px;font-size:10px;border-left:none;border-top:3px solid transparent}
+  .nav-item.active{border-top-color:var(--accent);border-left:none}
+  .main{margin-bottom:70px;height:calc(100vh - 70px)}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .task-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">⚡</div>
+    <span class="logo-text">TaskQueue</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-page="dashboard"><i class="fa fa-house"></i> Dashboard</div>
+    <div class="nav-item" data-page="submit"><i class="fa fa-plus"></i> Submit Task</div>
+    <div class="nav-item" data-page="tasks"><i class="fa fa-list"></i> All Tasks</div>
+    <div class="nav-item" data-page="dlq"><i class="fa fa-skull"></i> Dead Letter Queue</div>
+    <div class="nav-item" data-page="wstester"><i class="fa fa-wifi"></i> WebSocket Tester</div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="conn-status">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connText">Checking…</span>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="top-bar">
+    <h1 id="pageTitle">Dashboard</h1>
+    <span style="font-size:12px;color:var(--muted)">localhost:8000</span>
+  </div>
+
+  <!-- DASHBOARD PAGE -->
+  <section class="page active" id="page-dashboard">
+    <div class="stat-grid">
+      <div class="stat-card purple"><div class="stat-label">Total Tasks</div><div class="stat-val" id="s-total">—</div><i class="fa fa-database stat-icon"></i></div>
+      <div class="stat-card teal"><div class="stat-label">Successful</div><div class="stat-val" id="s-success">—</div><i class="fa fa-check stat-icon"></i></div>
+      <div class="stat-card red"><div class="stat-label">Failed</div><div class="stat-val" id="s-failed">—</div><i class="fa fa-xmark stat-icon"></i></div>
+      <div class="stat-card amber"><div class="stat-label">In DLQ</div><div class="stat-val" id="s-dlq">—</div><i class="fa fa-skull stat-icon"></i></div>
+    </div>
+
+    <div class="status-bar-wrap">
+      <h3>Task Status Breakdown</h3>
+      <div class="status-bar" id="statusBar"></div>
+      <div class="legend" id="statusLegend"></div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>Recent Tasks</h3>
+        <span style="font-size:12px;color:var(--muted)">Auto-refresh every 5s</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Name</th><th>Type</th><th>Priority</th><th>Status</th><th>Progress</th><th>Created</th>
+        </tr></thead>
+        <tbody id="recentTbody"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SUBMIT PAGE -->
+  <section class="page" id="page-submit">
+    <div class="form-card">
+      <div class="form-title"><i class="fa fa-plus" style="color:var(--accent)"></i> Submit New Task</div>
+      <div class="form-group">
+        <label>Task Name</label>
+        <input type="text" id="f-name" placeholder="e.g. Export user data">
+      </div>
+      <div class="form-group">
+        <label>Task Type</label>
+        <select id="f-type" onchange="UI.updatePayloadFields()">
+          <option value="file_processing">📁 File Processing</option>
+          <option value="data_export">📊 Data Export</option>
+          <option value="email_batch">📧 Email Batch</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <div class="toggle-group">
+          <div class="toggle-btn" data-val="1" onclick="UI.setPriority(1)">🟢 Low</div>
+          <div class="toggle-btn active" data-val="5" onclick="UI.setPriority(5)">🔵 Default</div>
+          <div class="toggle-btn" data-val="10" onclick="UI.setPriority(10)">🔴 High</div>
+        </div>
+      </div>
+      <div class="form-group" id="payloadFields"></div>
+      <button class="btn btn-primary" id="submitBtn" onclick="UI.submitTask()">Submit Task →</button>
+      <div class="banner success" id="submitSuccess"></div>
+      <div class="banner error" id="submitError"></div>
+    </div>
+  </section>
+
+  <!-- ALL TASKS PAGE -->
+  <section class="page" id="page-tasks">
+    <div class="filter-bar">
+      <select id="flt-status" onchange="UI.filterTasks()"><option value="">All Statuses</option><option>pending</option><option>sent</option><option>started</option><option>progress</option><option>success</option><option>failure</option><option>retry</option><option>revoked</option></select>
+      <select id="flt-type" onchange="UI.filterTasks()"><option value="">All Types</option><option value="file_processing">File Processing</option><option value="data_export">Data Export</option><option value="email_batch">Email Batch</option></select>
+      <select id="flt-priority" onchange="UI.filterTasks()"><option value="">All Priorities</option><option value="10">High</option><option value="5">Default</option><option value="1">Low</option></select>
+      <input type="text" id="flt-search" placeholder="Search by name…" oninput="UI.filterTasks()">
+      <button class="btn btn-muted btn-sm" onclick="UI.loadTasks()" id="refreshBtn"><i class="fa fa-rotate-right"></i> Refresh</button>
+    </div>
+    <div class="task-grid" id="taskGrid"><div style="padding:40px;text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div></div>
+  </section>
+
+  <!-- DLQ PAGE -->
+  <section class="page" id="page-dlq">
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3><i class="fa fa-skull" style="color:var(--warn);margin-right:8px"></i>Dead Letter Queue</h3>
+        <button class="btn btn-muted btn-sm" onclick="UI.loadDLQ()"><i class="fa fa-rotate-right"></i> Refresh</button>
+      </div>
+      <div id="dlqContent" style="padding:20px"><div style="text-align:center;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</div></div>
+    </div>
+  </section>
+
+  <!-- WS TESTER PAGE -->
+  <section class="page" id="page-wstester">
+    <div class="ws-connect-bar">
+      <input type="text" id="wsTaskId" placeholder="Paste Task UUID here…">
+      <button class="btn" style="background:var(--accent);color:#fff" onclick="UI.wsConnect()"><i class="fa fa-plug"></i> Connect</button>
+      <button class="btn btn-danger" id="wsDisconnectBtn" disabled onclick="UI.wsDisconnect()"><i class="fa fa-plug-circle-xmark"></i> Disconnect</button>
+      <div class="ws-status"><div class="ws-dot" id="wsDot"></div><span id="wsStatusText">Disconnected</span></div>
+    </div>
+
+    <div class="progress-display" id="wsProgress">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:600" id="wsTaskName">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px" id="wsTaskType">—</div>
+        </div>
+        <div id="wsStatusBadge"></div>
+      </div>
+      <div class="progress-pct" id="wsPct">0%</div>
+      <div class="progress-msg" id="wsMsg">Waiting…</div>
+      <div class="progress-bar-lg"><div class="prog-fill" id="wsBar" style="width:0%"></div></div>
+    </div>
+
+    <div class="terminal" id="terminal">
+      <div class="terminal-header">
+        <span>📡 WebSocket Message Log</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-muted btn-sm" onclick="UI.clearLog()">Clear</button>
+          <button class="btn btn-muted btn-sm" onclick="UI.copyLog()">Copy</button>
+        </div>
+      </div>
+      <div class="terminal-body" id="terminalBody"></div>
+    </div>
+
+    <div class="send-bar" style="margin-top:16px">
+      <input type="text" id="wsSendInput" placeholder='{"type":"ping"}'>
+      <button class="btn btn-muted btn-sm" onclick="UI.wsSend()"><i class="fa fa-paper-plane"></i> Send</button>
+      <button class="btn btn-muted btn-sm" onclick="UI.wsSendPing()">Ping</button>
+      <button class="btn btn-danger btn-sm" onclick="UI.wsSendCancel()">Send Cancel</button>
+    </div>
+  </section>
+</main>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="taskModal">
+  <div class="modal">
+    <button class="modal-close" onclick="UI.closeModal()">✕</button>
+    <h2 style="font-size:16px;font-weight:700;margin-bottom:20px">Task Details</h2>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ─── API ────────────────────────────────────────────────────────────────────
+const API = {
+  base: 'http://localhost:8000/api',
+
+  async get(path) {
+    const r = await fetch(this.base + path);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({detail: r.statusText}))).detail || r.statusText);
+    return r.json();
+  },
+
+  async post(path, body = {}) {
+    const r = await fetch(this.base + path, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || data.detail || JSON.stringify(data));
+    return data;
+  }
+};
+
+// ─── WS ─────────────────────────────────────────────────────────────────────
+const WS = {
+  socket: null,
+  taskId: null,
+  _handler: null,
+
+  connect(taskId) {
+    this.disconnect();
+    this.taskId = taskId;
+    const url = `ws://localhost:8000/ws/tasks/${taskId}/`;
+    this.socket = new WebSocket(url);
+    UI.setWsStatus('connecting');
+
+    this.socket.onopen = () => UI.setWsStatus('connected');
+    this.socket.onclose = (e) => {
+      UI.setWsStatus('disconnected');
+      UI.logWs(`Connection closed (code ${e.code})`);
+    };
+    this.socket.onerror = () => {
+      UI.setWsStatus('disconnected');
+      UI.logWs('Connection error');
+    };
+    this.socket.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      UI.logWs(JSON.stringify(data, null, 2));
+      if (this._handler) this._handler(data);
+    };
+  },
+
+  disconnect() {
+    if (this.socket) { this.socket.close(); this.socket = null; }
+    UI.setWsStatus('disconnected');
+  },
+
+  send(data) {
+    if (this.socket && this.socket.readyState === 1) {
+      this.socket.send(JSON.stringify(data));
+      UI.logWs('→ Sent: ' + JSON.stringify(data));
+    } else {
+      UI.logWs('Not connected');
+    }
+  },
+
+  onMessage(fn) { this._handler = fn; }
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const STATUS_COLORS = {
+  pending:'#8892a4', sent:'#8892a4', started:'#6495ed',
+  progress:'#f5a623', success:'#00d4aa', failure:'#ff5370',
+  retry:'#ff8c00', revoked:'#8892a4'
+};
+const TYPE_ICONS = {file_processing:'📁', data_export:'📊', email_batch:'📧'};
+
+function relTime(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (d < 60) return `${d}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  if (d < 86400) return `${Math.floor(d/3600)}h ago`;
+  return `${Math.floor(d/86400)}d ago`;
+}
+
+function badge(text, extra='') {
+  return `<span class="badge ${text} ${extra}">${text}</span>`;
+}
+
+function countUp(el, target, dur=600) {
+  const start = Date.now();
+  const tick = () => {
+    const p = Math.min((Date.now()-start)/dur, 1);
+    el.textContent = Math.round(p * target);
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ─── UI ──────────────────────────────────────────────────────────────────────
+const UI = {
+  _priority: 5,
+  _tasks: [],
+  _refreshInterval: null,
+
+  showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    document.querySelector(`[data-page="${name}"]`).classList.add('active');
+    const titles = {dashboard:'Dashboard',submit:'Submit Task',tasks:'All Tasks',dlq:'Dead Letter Queue',wstester:'WebSocket Tester'};
+    document.getElementById('pageTitle').textContent = titles[name] || name;
+    if (name === 'tasks') this.loadTasks();
+    if (name === 'dlq') this.loadDLQ();
+    if (name === 'dashboard') this.updateStats();
+  },
+
+  showToast(msg, type='info') {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    const icons = {success:'fa-check-circle', error:'fa-circle-xmark', info:'fa-circle-info'};
+    t.innerHTML = `<i class="fa ${icons[type]||'fa-circle-info'}"></i>${msg}`;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(40px)'; t.style.transition='.3s'; setTimeout(()=>t.remove(),300); }, 3000);
+  },
+
+  async updateStats() {
+    try {
+      const data = await API.get('/tasks/stats/');
+      const bs = data.by_status || {};
+      const total = data.total || 0;
+
+      countUp(document.getElementById('s-total'), total);
+      countUp(document.getElementById('s-success'), bs.success || 0);
+      countUp(document.getElementById('s-failed'), bs.failure || 0);
+      countUp(document.getElementById('s-dlq'), data.dlq_count || 0);
+
+      // Status bar
+      const bar = document.getElementById('statusBar');
+      const legend = document.getElementById('statusLegend');
+      bar.innerHTML = ''; legend.innerHTML = '';
+      const statuses = ['pending','sent','started','progress','success','failure','retry','revoked'];
+      statuses.forEach(s => {
+        const count = bs[s] || 0;
+        const pct = total ? ((count/total)*100).toFixed(1) : 0;
+        if (pct > 0) {
+          const seg = document.createElement('div');
+          seg.className = 'status-seg';
+          seg.style.cssText = `width:${pct}%;background:${STATUS_COLORS[s]};flex-shrink:0`;
+          seg.setAttribute('data-tip', `${s}: ${count} (${pct}%)`);
+          bar.appendChild(seg);
+        }
+        const li = document.createElement('div');
+        li.className = 'legend-item';
+        li.innerHTML = `<div class="legend-dot" style="background:${STATUS_COLORS[s]}"></div><span>${s}: ${count}</span>`;
+        legend.appendChild(li);
+      });
+      if (!total) bar.innerHTML = '<div style="width:100%;background:#2a2d3e;border-radius:10px;height:100%"></div>';
+    } catch(e) {
+      this.showBackendError();
+    }
+    this.loadRecent();
+  },
+
+  async loadRecent() {
+    const tbody = document.getElementById('recentTbody');
+    try {
+      const tasks = await API.get('/tasks/?ordering=-created_at');
+      const arr = Array.isArray(tasks) ? tasks.slice(0,10) : (tasks.results||[]).slice(0,10);
+      if (!arr.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No tasks yet</td></tr>'; return; }
+      tbody.innerHTML = arr.map(t => `
+        <tr>
+          <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</td>
+          <td>${TYPE_ICONS[t.task_type]||''} ${t.task_type.replace('_',' ')}</td>
+          <td>${badge(t.priority==10?'high':t.priority==1?'low':'default')}</td>
+          <td>${badge(t.status)}</td>
+          <td style="min-width:100px"><div class="prog-wrap"><div class="prog-fill" style="width:${t.progress||0}%"></div></div></td>
+          <td style="color:var(--muted);font-size:12px">${relTime(t.created_at)}</td>
+        </tr>`).join('');
+    } catch(e) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--danger)">Failed to load</td></tr>`; }
+  },
+
+  // ── SUBMIT ──
+  setPriority(val) {
+    this._priority = val;
+    document.querySelectorAll('.toggle-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.val) === val);
+    });
+  },
+
+  updatePayloadFields() {
+    const type = document.getElementById('f-type').value;
+    const wrap = document.getElementById('payloadFields');
+    const fields = {
+      file_processing: `
+        <label>File Path</label>
+        <input type="text" id="p-file_path" placeholder="/data/input.csv" style="margin-bottom:12px">
+        <label>Chunk Size</label>
+        <input type="number" id="p-chunk_size" value="100">`,
+      data_export: `
+        <label>Format</label>
+        <select id="p-format" style="margin-bottom:12px"><option value="csv">CSV</option><option value="json">JSON</option><option value="xlsx">XLSX</option></select>
+        <label>Filters (optional)</label>
+        <input type="text" id="p-filters" placeholder="e.g. date_range=2024-01">`,
+      email_batch: `
+        <label>Email Count</label>
+        <input type="number" id="p-count" value="100" style="margin-bottom:12px">
+        <label>Template</label>
+        <input type="text" id="p-template" placeholder="welcome">`
+    };
+    wrap.innerHTML = `<label>Payload</label><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">${fields[type]||''}</div>`;
+  },
+
+  buildPayload() {
+    const type = document.getElementById('f-type').value;
+    const g = id => document.getElementById(id);
+    if (type === 'file_processing') return {file_path: g('p-file_path')?.value||'/data/file.csv', chunk_size: parseInt(g('p-chunk_size')?.value||100)};
+    if (type === 'data_export') return {format: g('p-format')?.value||'csv', filters: g('p-filters')?.value||''};
+    if (type === 'email_batch') return {count: parseInt(g('p-count')?.value||100), template: g('p-template')?.value||'default'};
+    return {};
+  },
+
+  async submitTask() {
+    const name = document.getElementById('f-name').value.trim();
+    const type = document.getElementById('f-type').value;
+    const successEl = document.getElementById('submitSuccess');
+    const errorEl = document.getElementById('submitError');
+    const btn = document.getElementById('submitBtn');
+    successEl.classList.remove('show'); errorEl.classList.remove('show');
+
+    if (!name) { errorEl.innerHTML = '⚠ Task Name is required.'; errorEl.classList.add('show'); return; }
+
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Submitting…';
+    try {
+      const res = await API.post('/tasks/submit/', {name, task_type: type, priority: this._priority, payload: this.buildPayload()});
+      btn.innerHTML='Submit Task →'; btn.disabled=false;
+      successEl.innerHTML = `<div><b>✓ Task submitted!</b><br>ID: ${res.id}<br><br>
+        <button class="btn btn-success btn-sm" onclick="UI.watchTask('${res.id}')">Watch Live →</button></div>`;
+      successEl.classList.add('show');
+      this.showToast('Task submitted successfully', 'success');
+    } catch(e) {
+      btn.innerHTML='Submit Task →'; btn.disabled=false;
+      errorEl.innerHTML = `⚠ ${e.message}`; errorEl.classList.add('show');
+      this.showToast('Submit failed: ' + e.message, 'error');
+    }
+  },
+
+  watchTask(id) {
+    document.getElementById('wsTaskId').value = id;
+    this.showPage('wstester');
+    this.wsConnect();
+  },
+
+  // ── ALL TASKS ──
+  async loadTasks() {
+    const btn = document.getElementById('refreshBtn');
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Refreshing';
+    try {
+      let url = '/tasks/?ordering=-created_at&page_size=100';
+      const s = document.getElementById('flt-status').value;
+      const tp = document.getElementById('flt-type').value;
+      const pr = document.getElementById('flt-priority').value;
+      if (s) url += `&status=${s}`;
+      if (tp) url += `&task_type=${tp}`;
+      if (pr) url += `&priority=${pr}`;
+      const data = await API.get(url);
+      this._tasks = Array.isArray(data) ? data : (data.results || []);
+      this.filterTasks();
+    } catch(e) {
+      document.getElementById('taskGrid').innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger)">Failed to load tasks: ${e.message}</div>`;
+    }
+    btn.innerHTML = '<i class="fa fa-rotate-right"></i> Refresh';
+  },
+
+  filterTasks() {
+    const search = (document.getElementById('flt-search').value||'').toLowerCase();
+    const filtered = this._tasks.filter(t => !search || t.name.toLowerCase().includes(search));
+    this.renderTaskCards(filtered);
+  },
+
+  renderTaskCards(tasks) {
+    const grid = document.getElementById('taskGrid');
+    if (!tasks.length) { grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);grid-column:1/-1">No tasks found</div>'; return; }
+    grid.innerHTML = tasks.map(t => {
+      const pLabel = t.priority==10?'high':t.priority==1?'low':'default';
+      const showProg = ['started','progress','retry'].includes(t.status);
+      const canRetry = ['failure','revoked'].includes(t.status);
+      const canCancel = ['pending','sent','started','progress'].includes(t.status);
+      return `<div class="task-card">
+        <div class="task-card-top">
+          <span class="task-name">${t.name}</span>
+          ${badge(t.status)}
+        </div>
+        <div class="task-meta">
+          <span>${TYPE_ICONS[t.task_type]||''} ${t.task_type.replace(/_/g,' ')}</span>
+          ${badge(pLabel)}
+        </div>
+        ${showProg ? `<div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>${t.progress_message||''}</span><span>${t.progress||0}%</span></div>
+          <div class="prog-wrap"><div class="prog-fill" style="width:${t.progress||0}%"></div></div>
+        </div>` : ''}
+        <div style="font-size:12px;color:var(--muted)">${relTime(t.created_at)}${t.duration_seconds ? ` · ${t.duration_seconds.toFixed(1)}s` : ''}</div>
+        <div class="task-actions">
+          <button class="icon-btn btn-muted" title="View Details" onclick="UI.openModal('${t.id}')"><i class="fa fa-eye"></i></button>
+          ${canRetry ? `<button class="icon-btn btn-success" title="Retry" onclick="UI.retryTask('${t.id}')"><i class="fa fa-rotate-right"></i></button>` : ''}
+          ${canCancel ? `<button class="icon-btn btn-danger" title="Cancel" onclick="UI.cancelTask('${t.id}')"><i class="fa fa-xmark"></i></button>` : ''}
+          <button class="icon-btn" style="background:rgba(108,99,255,.15);color:var(--accent)" title="Watch Live" onclick="UI.watchTask('${t.id}')"><i class="fa fa-wifi"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  async retryTask(id) {
+    try {
+      await API.post(`/tasks/${id}/retry/`);
+      this.showToast('Task re-submitted', 'success');
+      this.loadTasks();
+    } catch(e) { this.showToast('Retry failed: ' + e.message, 'error'); }
+  },
+
+  async cancelTask(id) {
+    try {
+      await API.post(`/tasks/${id}/cancel/`);
+      this.showToast('Task cancelled', 'info');
+      this.loadTasks();
+    } catch(e) { this.showToast('Cancel failed: ' + e.message, 'error'); }
+  },
+
+  // ── MODAL ──
+  _allTasksCache: {},
+  async openModal(id) {
+    try {
+      const t = await API.get(`/tasks/${id}/`);
+      const body = document.getElementById('modalBody');
+      const kv = (k, v) => `<div class="kv"><div class="kv-key">${k}</div><div>${v||'—'}</div></div>`;
+      body.innerHTML = `
+        ${kv('ID', `<code style="font-size:11px">${t.id}</code>`)}
+        ${kv('Name', t.name)}
+        ${kv('Type', t.task_type)}
+        ${kv('Priority', t.priority==10?'High':t.priority==1?'Low':'Default')}
+        ${kv('Status', badge(t.status))}
+        ${kv('Progress', `${t.progress}% — ${t.progress_message||''}`)}
+        ${kv('Celery Task ID', `<code style="font-size:11px">${t.celery_task_id||'—'}</code>`)}
+        ${kv('Retries', `${t.retry_count} / ${t.max_retries}`)}
+        ${kv('Created', new Date(t.created_at).toLocaleString())}
+        ${kv('Started', t.started_at ? new Date(t.started_at).toLocaleString() : '—')}
+        ${kv('Completed', t.completed_at ? new Date(t.completed_at).toLocaleString() : '—')}
+        ${kv('Duration', t.duration_seconds ? t.duration_seconds.toFixed(2)+'s' : '—')}
+        ${t.error_message ? kv('Error', `<span style="color:var(--danger)">${t.error_message}</span>`) : ''}
+        <div style="margin-top:16px"><div class="kv-key" style="margin-bottom:8px">Payload</div><pre class="json-block">${JSON.stringify(t.payload,null,2)}</pre></div>
+        ${t.result ? `<div style="margin-top:12px"><div class="kv-key" style="margin-bottom:8px">Result</div><pre class="json-block">${JSON.stringify(t.result,null,2)}</pre></div>` : ''}
+      `;
+      document.getElementById('taskModal').classList.add('show');
+    } catch(e) { this.showToast('Failed to load task: ' + e.message, 'error'); }
+  },
+
+  closeModal() { document.getElementById('taskModal').classList.remove('show'); },
+
+  // ── DLQ ──
+  async loadDLQ() {
+    const wrap = document.getElementById('dlqContent');
+    wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    try {
+      const data = await API.get('/dashboard/dlq/');
+      const items = data.tasks || [];
+      if (!items.length) {
+        wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><h3 style="margin-bottom:8px">No failed tasks</h3><p>Everything is running smoothly</p></div>`;
+        return;
+      }
+      wrap.innerHTML = `<table>
+        <thead><tr><th>Task Name</th><th>Type</th><th>Task ID</th><th>Retries</th><th>Error</th><th>Actions</th></tr></thead>
+        <tbody>${items.map((item,i) => `<tr id="dlq-row-${i}">
+          <td style="font-weight:500">${item.task_name?.split('.').pop()||'Unknown'}</td>
+          <td>${item.args?.[0]||'—'}</td>
+          <td><code style="font-size:11px">${item.task_id?.slice(0,16)||'—'}…</code></td>
+          <td>${item.retries||0}</td>
+          <td style="color:var(--danger);max-width:200px;overflow:hidden;text-overflow:ellipsis">${item.exception||'—'}</td>
+          <td><button class="btn btn-warn btn-sm" onclick="UI.requeueDLQ('${item.args?.[0]}',${i})">Requeue</button></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } catch(e) {
+      wrap.innerHTML = `<div style="text-align:center;padding:24px;color:var(--danger)">Failed to load DLQ: ${e.message}</div>`;
+    }
+  },
+
+  async requeueDLQ(taskId, rowIdx) {
+    try {
+      await API.post(`/dashboard/dlq/${taskId}/requeue/`);
+      const row = document.getElementById(`dlq-row-${rowIdx}`);
+      if (row) { row.style.transition='.4s'; row.style.opacity='0'; setTimeout(()=>row.remove(),400); }
+      this.showToast('Task requeued successfully', 'success');
+    } catch(e) { this.showToast('Requeue failed: ' + e.message, 'error'); }
+  },
+
+  // ── WEBSOCKET TESTER ──
+  setWsStatus(state) {
+    const dot = document.getElementById('wsDot');
+    const txt = document.getElementById('wsStatusText');
+    const discBtn = document.getElementById('wsDisconnectBtn');
+    dot.className = 'ws-dot ' + state;
+    txt.textContent = state === 'connected' ? 'Connected' : state === 'connecting' ? 'Connecting…' : 'Disconnected';
+    discBtn.disabled = state !== 'connected';
+    if (state !== 'connected') {
+      document.getElementById('wsProgress').classList.remove('show');
+      document.getElementById('wsPct').classList.remove('pulsing');
+    }
+  },
+
+  wsConnect() {
+    const id = document.getElementById('wsTaskId').value.trim();
+    if (!id) { this.showToast('Enter a Task UUID', 'error'); return; }
+    this.logWs('Connecting to task ' + id + '…');
+    WS.connect(id);
+    WS.onMessage(msg => this.handleWsMessage(msg));
+  },
+
+  wsDisconnect() { WS.disconnect(); this.showToast('Disconnected', 'info'); },
+
+  handleWsMessage(msg) {
+    const prog = document.getElementById('wsProgress');
+    const pct = document.getElementById('wsPct');
+    const bar = document.getElementById('wsBar');
+    const msgEl = document.getElementById('wsMsg');
+
+    if (msg.type === 'task.state' || msg.type === 'task.progress' || msg.type === 'task.update') {
+      prog.classList.add('show');
+      if (msg.name) document.getElementById('wsTaskName').textContent = msg.name;
+      if (msg.task_type) document.getElementById('wsTaskType').textContent = msg.task_type;
+      if (msg.status) document.getElementById('wsStatusBadge').innerHTML = badge(msg.status);
+      const p = msg.progress || 0;
+      pct.textContent = p + '%';
+      bar.style.width = p + '%';
+      if (msg.message) msgEl.textContent = msg.message;
+      pct.classList.toggle('pulsing', msg.status === 'progress');
+    }
+  },
+
+  wsSend() {
+    const input = document.getElementById('wsSendInput');
+    try { WS.send(JSON.parse(input.value)); } catch(e) { this.showToast('Invalid JSON', 'error'); }
+  },
+
+  wsSendPing() { document.getElementById('wsSendInput').value = '{"type":"ping"}'; WS.send({type:'ping'}); },
+  wsSendCancel() { document.getElementById('wsSendInput').value = '{"type":"cancel"}'; WS.send({type:'cancel'}); },
+
+  logWs(text) {
+    const body = document.getElementById('terminalBody');
+    const now = new Date();
+    const ts = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = `<span class="log-time">[${ts}]</span> ${text.replace(/</g,'&lt;')}`;
+    body.appendChild(line);
+    body.scrollTop = body.scrollHeight;
+  },
+
+  clearLog() { document.getElementById('terminalBody').innerHTML = ''; },
+  copyLog() {
+    const text = [...document.querySelectorAll('.log-line')].map(l => l.textContent).join('\n');
+    navigator.clipboard.writeText(text).then(() => this.showToast('Copied to clipboard', 'success'));
+  },
+
+  // ── AUTO REFRESH ──
+  startAutoRefresh() {
+    this._refreshInterval = setInterval(() => {
+      const active = document.querySelector('.page.active')?.id;
+      if (active === 'page-dashboard') { this.updateStats(); }
+      if (active === 'page-tasks') { this.loadTasks(); }
+    }, 5000);
+  },
+
+  stopAutoRefresh() { if (this._refreshInterval) clearInterval(this._refreshInterval); },
+
+  // ── CONNECTION CHECK ──
+  async checkConnection() {
+    try {
+      await API.get('/tasks/stats/');
+      document.getElementById('connDot').classList.add('online');
+      document.getElementById('connText').textContent = 'API Online';
+    } catch {
+      document.getElementById('connDot').classList.remove('online');
+      document.getElementById('connText').textContent = 'API Offline';
+    }
+  },
+
+  showBackendError() {
+    // Only show once
+    if (document.getElementById('backendBanner')) return;
+    const b = document.createElement('div');
+    b.id = 'backendBanner';
+    b.style.cssText = 'background:rgba(255,83,112,.1);border:1px solid rgba(255,83,112,.3);color:var(--danger);padding:12px 20px;text-align:center;font-size:13px';
+    b.textContent = '⚠ Cannot reach backend at localhost:8000 — is Docker running?';
+    document.querySelector('.main').prepend(b);
+  }
+};
+
+// ─── ROUTER ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => UI.showPage(item.dataset.page));
+});
+
+document.getElementById('taskModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) UI.closeModal();
+});
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  UI.updatePayloadFields();
+  UI.updateStats();
+  UI.checkConnection();
+  UI.startAutoRefresh();
+  setInterval(() => UI.checkConnection(), 10000);
+});
+</script>
+</body>
+</html>
