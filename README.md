@@ -65,7 +65,7 @@
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-org/django-celery-task-queue.git
+git clone https://github.com/ATOUIYakoub/django-celery-task-queue.git
 cd django-celery-task-queue
 
 # 2. Configure environment
